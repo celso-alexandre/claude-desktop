@@ -1,0 +1,52 @@
+name: Sync with upstream
+
+# Weekly: stage aaddrick/claude-desktop-debian main as one squashed change on the single
+# auto/sync-upstream branch and upsert a PR for it. The Build workflow tests it, but it is
+# never merged automatically: it is someone else's code, so review it first.
+on:
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: auto/sync-upstream
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: sync
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          set +e; SUMMARY=$(fork/sync-upstream.sh); rc=$?; set -e
+          [ "$rc" = 3 ] && exit 0
+          [ "$rc" = 0 ] || exit "$rc"
+          echo "summary=$SUMMARY" >> "$GITHUB_OUTPUT"
+      - name: Upsert PR
+        if: steps.sync.outputs.summary
+        env:
+          SUMMARY: ${{ steps.sync.outputs.summary }}
+        run: |
+          git commit -qm "Sync with $SUMMARY"
+          if git fetch -q origin "$BRANCH" 2>/dev/null && git diff --quiet FETCH_HEAD HEAD; then
+            echo "$BRANCH already proposes: $SUMMARY"; exit 0
+          fi
+          git push -f origin "HEAD:refs/heads/$BRANCH"
+
+          TITLE="Sync with $SUMMARY"
+          BODY="Weekly sync with [aaddrick/claude-desktop-debian](https://github.com/aaddrick/claude-desktop-debian) main, squashed. This fork's workflows are kept as they are.
+
+          **Not merged automatically.** This is upstream's code going into the packages you install: review the diff before merging. The Build workflow runs on this branch."
+          N=$(gh pr list -R "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number -q '.[0].number')
+          if [ -n "$N" ]; then gh pr edit "$N" -R "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          else gh pr create -R "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "$TITLE" --body "$BODY"; fi
+          gh workflow run fork-build.yml -R "$GITHUB_REPOSITORY" --ref "$BRANCH"

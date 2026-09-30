@@ -1,0 +1,53 @@
+app-id: io.github.celso_alexandre.ClaudeDesktop
+runtime: org.freedesktop.Platform
+runtime-version: '26.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '26.08'
+command: claude-desktop
+branch: stable
+separate-locales: false
+
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=x11
+  - --socket=pulseaudio
+  - --device=dri
+  # Code tab and attachments work on files under home
+  - --filesystem=home
+  - --talk-name=org.freedesktop.Notifications
+  # Keyring for the app's stored credentials (Electron safeStorage)
+  - --talk-name=org.freedesktop.secrets
+  # Tray icon
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+modules:
+  - name: claude-desktop
+    buildsystem: simple
+    build-commands:
+      - ar x claude-desktop.deb
+      - tar xf data.tar.xz
+      - cp -a usr/lib/claude-desktop /app/lib/claude-desktop
+      # zypak provides the sandbox inside Flatpak; the setuid helper cannot work here
+      - rm -f /app/lib/claude-desktop/chrome-sandbox
+      - install -Dm755 claude-desktop.sh /app/bin/claude-desktop
+      - install -Dm644 usr/share/applications/com.anthropic.Claude.desktop /app/share/applications/${FLATPAK_ID}.desktop
+      - sed -i "s/^Icon=.*/Icon=${FLATPAK_ID}/" /app/share/applications/${FLATPAK_ID}.desktop
+      - |
+        for png in usr/share/icons/hicolor/*/apps/claude-desktop.png; do
+          size=$(basename "$(dirname "$(dirname "$png")")")
+          install -Dm644 "$png" "/app/share/icons/hicolor/$size/apps/${FLATPAK_ID}.png"
+        done
+      - install -Dm644 ${FLATPAK_ID}.metainfo.xml /app/share/metainfo/${FLATPAK_ID}.metainfo.xml
+    sources:
+      # Official Linux build from Anthropic's APT repo; fork/check-update.sh keeps this current:
+      # curl -s https://downloads.claude.ai/claude-desktop/apt/stable/dists/stable/main/binary-amd64/Packages
+      - type: file
+        url: https://downloads.claude.ai/claude-desktop/apt/stable/pool/main/c/claude-desktop/claude-desktop_2.9939.4_amd64.deb
+        sha256: 3cfddb23bf2911e05e27b4ed3856b8e795df94643b2c35b59deb317cf995bca0
+        dest-filename: claude-desktop.deb
+      - type: file
+        path: claude-desktop.sh
+      - type: file
+        path: io.github.celso_alexandre.ClaudeDesktop.metainfo.xml

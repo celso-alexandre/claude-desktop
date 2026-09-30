@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.celso_alexandre.ClaudeDesktop</id>
+  <name>Claude</name>
+  <summary>Desktop application for Claude.ai (unofficial Flatpak repack)</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <description>
+    <p>Anthropic's official Claude Desktop Linux build, repacked unmodified as a Flatpak.
+    Not affiliated with or supported by Anthropic.</p>
+  </description>
+  <launchable type="desktop-id">io.github.celso_alexandre.ClaudeDesktop.desktop</launchable>
+  <url type="homepage">https://github.com/celso-alexandre/claude-desktop</url>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="2.9939.4" date="2026-09-30"/>
+  </releases>
+</component>

@@ -1,0 +1,57 @@
+name: Check for new Claude Desktop release
+
+# Weekly: if Anthropic's APT repo has a newer claude-desktop .deb, (re)write the single
+# auto/update-claude branch and upsert one PR for it. The Build workflow is dispatched
+# explicitly because pushes made with GITHUB_TOKEN do not trigger other workflows; it
+# merges the PR when every package passes.
+on:
+  schedule:
+    - cron: "23 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: auto/update-claude
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        run: |
+          set +e; SUMMARY=$(fork/check-update.sh); rc=$?; set -e
+          [ "$rc" = 3 ] && exit 0
+          [ "$rc" = 0 ] || exit "$rc"
+          echo "summary=$SUMMARY" >> "$GITHUB_OUTPUT"
+      - name: Upsert PR
+        if: steps.check.outputs.summary
+        env:
+          SUMMARY: ${{ steps.check.outputs.summary }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The metainfo date moves every run; the pins and manifest say whether it is new
+          if git fetch -q origin "$BRANCH" 2>/dev/null &&
+            git diff --quiet FETCH_HEAD -- scripts/setup/official-deb.sh fork/flatpak/*.yml; then
+            echo "$BRANCH already proposes: $SUMMARY"; exit 0
+          fi
+          git checkout -B "$BRANCH"
+          git commit -qam "Update to $SUMMARY"
+          git push -f origin "$BRANCH"
+
+          TITLE="Update to $SUMMARY"
+          BODY="Weekly check: $SUMMARY.
+
+          - .deb: \`$(grep -oP 'url: \K\S+\.deb' fork/flatpak/*.yml)\`
+          - sha256: \`$(grep -oP "^OFFICIAL_DEB_SHA256_AMD64='\K[^']+" scripts/setup/official-deb.sh)\`
+
+          The Build workflow runs on this branch and tests the RPM, AppImage and Flatpak; it merges when all pass. Merging publishes the release and the dnf and Flatpak repos."
+          N=$(gh pr list -R "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number -q '.[0].number')
+          if [ -n "$N" ]; then gh pr edit "$N" -R "$GITHUB_REPOSITORY" --title "$TITLE" --body "$BODY"
+          else gh pr create -R "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "$TITLE" --body "$BODY"; fi
+          gh workflow run fork-build.yml -R "$GITHUB_REPOSITORY" --ref "$BRANCH"
