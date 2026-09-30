@@ -357,7 +357,9 @@ fi
 # $package_name: it matches both the old claude-desktop-* and the new
 # claude-desktop-unofficial-* artifact names, so AppImages installed
 # before the rename keep self-updating. Do not narrow it.
-update_info="gh-releases-zsync|aaddrick|claude-desktop-debian|latest|claude-desktop-*-${architecture}.AppImage.zsync"
+# Points at the repository that publishes the release (a fork's own in its CI)
+update_repo=${GITHUB_REPOSITORY:-aaddrick/claude-desktop-debian}
+update_info="gh-releases-zsync|${update_repo%%/*}|${update_repo#*/}|latest|claude-desktop-*-${architecture}.AppImage.zsync"
 echo "Update info: $update_info"
 
 if ! "$appimagetool_path" --runtime-file "$runtime_path" \
