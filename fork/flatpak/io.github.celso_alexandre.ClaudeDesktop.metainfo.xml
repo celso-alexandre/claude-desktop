@@ -10,7 +10,7 @@
     Not affiliated with or supported by Anthropic.</p>
   </description>
   <launchable type="desktop-id">io.github.celso_alexandre.ClaudeDesktop.desktop</launchable>
-  <url type="homepage">https://github.com/celso-alexandre/claude-desktop-debian</url>
+  <url type="homepage">https://github.com/celso-alexandre/claude-desktop</url>
   <content_rating type="oars-1.1"/>
   <releases>
     <release version="2.9939.4" date="2026-09-30"/>

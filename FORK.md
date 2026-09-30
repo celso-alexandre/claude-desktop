@@ -13,7 +13,7 @@ Packages and repo metadata are signed with this fork's key
 ### Fedora / RHEL (dnf): updates with your other packages
 
 ```bash
-sudo curl -fsSLo /etc/yum.repos.d/claude-desktop.repo https://celso-alexandre.github.io/claude-desktop-debian/claude-desktop.repo
+sudo curl -fsSLo /etc/yum.repos.d/claude-desktop.repo https://celso-alexandre.github.io/claude-desktop/claude-desktop.repo
 sudo dnf install claude-desktop-unofficial
 ```
 
@@ -25,7 +25,7 @@ Cowork (the agentic VM tab) also needs `sudo dnf install qemu-kvm edk2-ovmf virt
 ### Any distro (Flatpak): updates with your other Flatpaks
 
 ```bash
-flatpak install --user https://celso-alexandre.github.io/claude-desktop-debian/io.github.celso_alexandre.ClaudeDesktop.flatpakref
+flatpak install --user https://celso-alexandre.github.io/claude-desktop/io.github.celso_alexandre.ClaudeDesktop.flatpakref
 ```
 
 Chat works fully. The **Code** tab sees the Flatpak runtime, not your system's toolchain,
@@ -34,7 +34,7 @@ and **Cowork** is unavailable (no QEMU in the sandbox): use the RPM on dev machi
 ### Any distro (AppImage)
 
 Download `claude-desktop-unofficial-*-amd64.AppImage` from the
-[latest release](https://github.com/celso-alexandre/claude-desktop-debian/releases/latest).
+[latest release](https://github.com/celso-alexandre/claude-desktop/releases/latest).
 It carries update information for this fork's releases, so Gear Lever or AppImageUpdate
 keeps it current.
 
