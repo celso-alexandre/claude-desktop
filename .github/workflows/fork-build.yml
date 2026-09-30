@@ -147,7 +147,7 @@ jobs:
             libXScrnSaver libXtst libxshmfence
       - env:
           TARGET_ARCH: amd64
-        run: tests/test-artifact-rpm.sh artifacts/
+        run: bash tests/test-artifact-rpm.sh artifacts/
 
   appimage-test:
     needs: appimage
@@ -163,7 +163,7 @@ jobs:
           sudo apt-get install -y file libfuse2 nodejs npm xvfb xdotool dbus-x11 procps
       - env:
           TARGET_ARCH: amd64
-        run: tests/test-artifact-appimage.sh artifacts/
+        run: bash tests/test-artifact-appimage.sh artifacts/
 
   flatpak-test:
     needs: [meta, flatpak]
@@ -178,13 +178,18 @@ jobs:
           name: flatpak
       - name: Install
         run: |
-          dnf install -y flatpak xorg-x11-server-Xvfb xdotool ImageMagick dbus-daemon util-linux procps-ng
-          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y --noninteractive "claude-desktop-${{ needs.meta.outputs.claude }}-x86_64.flatpak"
+          dnf install -y flatpak xorg-x11-server-Xvfb xdotool ImageMagick dbus-daemon util-linux procps-ng shadow-utils
+          flatpak remote-add --system --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --system -y --noninteractive "claude-desktop-${{ needs.meta.outputs.claude }}-x86_64.flatpak"
+      # As a regular user, like a desktop session: Electron refuses to run sandboxed as root
       - name: Smoke test
-        env:
-          SMOKE_SCREENSHOT: smoke-flatpak.png
-        run: dbus-run-session -- fork/smoke-test.sh flatpak run "$APP_ID"
+        run: |
+          useradd -m smoke
+          install -d -m 700 -o smoke /tmp/xdg-smoke
+          runuser -u smoke -- env XDG_RUNTIME_DIR=/tmp/xdg-smoke SMOKE_SCREENSHOT=/tmp/smoke-flatpak.png \
+            dbus-run-session -- fork/smoke-test.sh flatpak run "$APP_ID"
+      - if: always()
+        run: cp /tmp/smoke-flatpak.png . || true
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
