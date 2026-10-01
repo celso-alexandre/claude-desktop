@@ -243,6 +243,30 @@ esac
 
 appimagetool_path=''
 
+# Pinned, maintained releases (AppImageKit's "continuous" assets are obsolete and get
+# replaced in place): AppImage/appimagetool 1.9.1, AppImage/type2-runtime 20251108
+appimagetool_release='https://github.com/AppImage/appimagetool/releases/download/1.9.1'
+runtime_release='https://github.com/AppImage/type2-runtime/releases/download/20251108'
+declare -A appimagetool_sha256=(
+	[x86_64]='ed4ce84f0d9caff66f50bcca6ff6f35aae54ce8135408b3fa33abfc3cb384eb0'
+	[aarch64]='f0837e7448a0c1e4e650a93bb3e85802546e60654ef287576f46c71c126a9158'
+)
+declare -A runtime_sha256=(
+	[x86_64]='2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d'
+	[aarch64]='00cbdfcf917cc6c0ff6d3347d59e0ca1f7f45a6df1a428a0d6d8a78664d87444'
+)
+# Usage: require_sha256 FILE EXPECTED — removes FILE and exits on mismatch
+require_sha256() {
+	local actual
+	actual=$(sha256sum "$1" | cut -d' ' -f1)
+	if [[ $actual != "$2" ]]; then
+		echo "SHA-256 mismatch for $1: got $actual, expected $2" >&2
+		rm -f "$1"
+		exit 1
+	fi
+	echo "SHA-256 verified: $(basename "$1")"
+}
+
 # Check system PATH first
 if command -v appimagetool &> /dev/null; then
 	appimagetool_path=$(command -v appimagetool)
@@ -255,6 +279,7 @@ if [[ -z $appimagetool_path ]]; then
 	if [[ -f $local_path ]]; then
 		appimagetool_path="$local_path"
 		echo "Found downloaded ${host_arch} appimagetool: $appimagetool_path"
+		require_sha256 "$appimagetool_path" "${appimagetool_sha256[$host_arch]}"
 	fi
 fi
 
@@ -262,10 +287,11 @@ fi
 if [[ -z $appimagetool_path ]]; then
 	echo 'Downloading appimagetool...'
 
-	appimagetool_url="https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${host_arch}.AppImage"
+	appimagetool_url="$appimagetool_release/appimagetool-${host_arch}.AppImage"
 	appimagetool_path="$work_dir/appimagetool-${host_arch}.AppImage"
 
 	if wget -q -O "$appimagetool_path" "$appimagetool_url"; then
+		require_sha256 "$appimagetool_path" "${appimagetool_sha256[$host_arch]}"
 		chmod +x "$appimagetool_path" || exit 1
 		echo "Downloaded appimagetool to $appimagetool_path"
 	else
@@ -311,7 +337,7 @@ echo "Using ARCH=$ARCH"
 
 runtime_path="$work_dir/appimage-runtime-${ARCH}"
 if [[ ! -f $runtime_path ]]; then
-	runtime_url="https://github.com/AppImage/AppImageKit/releases/download/continuous/runtime-${ARCH}"
+	runtime_url="$runtime_release/runtime-${ARCH}"
 	echo "Downloading AppImage runtime for ${ARCH}..."
 	if ! wget -q -O "$runtime_path" "$runtime_url"; then
 		echo "Failed to download AppImage runtime from $runtime_url" >&2
@@ -319,6 +345,7 @@ if [[ ! -f $runtime_path ]]; then
 		exit 1
 	fi
 fi
+require_sha256 "$runtime_path" "${runtime_sha256[$ARCH]}"
 
 # Local build - no update information
 if [[ $GITHUB_ACTIONS != 'true' ]]; then

@@ -37,7 +37,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # The metainfo date moves every run; the pins and manifest say whether it is new
           if git fetch -q origin "$BRANCH" 2>/dev/null &&
-            git diff --quiet FETCH_HEAD -- scripts/setup/official-deb.sh fork/flatpak/*.yml; then
+            git diff --quiet FETCH_HEAD -- scripts/setup/official-deb.sh fork/flatpak/*.yml fork/fedora-image; then
             echo "$BRANCH already proposes: $SUMMARY"; exit 0
           fi
           git checkout -B "$BRANCH"

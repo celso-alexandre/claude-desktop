@@ -52,6 +52,10 @@ active_patches=(
 	patch_cowork_bwrap
 	patch_tray_icon_env_override
 )
+# Fork: ship Anthropic's app.asar unmodified (see FORK.md)
+if [[ ${CLAUDE_OFFICIAL_ASAR:-} == 1 ]]; then
+	active_patches=()
+fi
 
 # Retirement tripwire: how each active patch stops being needed. Every
 # build starts from the pristine official bundle, so a patch that

@@ -1,12 +1,52 @@
 # Claude Desktop for Fedora, Flatpak and AppImage (celso-alexandre fork)
 
 Anthropic's official Claude Desktop for Linux ships only as a `.deb`. This fork repacks
-that `.deb`, checked against the SHA-256 in Anthropic's own APT index, into three formats
-and publishes them from this repository only: packages on GitHub Releases, the dnf and
-Flatpak repos on GitHub Pages. There is no third-party package host, CDN or signing key.
+that `.deb` into three formats and publishes them from this repository only: packages on
+GitHub Releases, the dnf and Flatpak repos on GitHub Pages. There is no third-party package
+host, CDN or signing key.
 
 Packages and repo metadata are signed with this fork's key
 (`F4E3 86FF 1A06 E49B 2D02  FB72 B072 862E 877E B4A6`, also in [`fork/KEY.gpg`](fork/KEY.gpg)).
+
+## What is verified
+
+- **Anthropic's `.deb`**: [`fork/official-index.sh`](fork/official-index.sh) checks the signed
+  `InRelease` of Anthropic's APT repo with `gpgv` against their release key
+  ([`fork/anthropic-claude-desktop.asc`](fork/anthropic-claude-desktop.asc), fingerprint
+  `31DD DE24 DDFA B679 F42D  7BD2 BAA9 29FF 1A7E CACE`, as published in their install docs),
+  then the `Packages` index against the signed hash, then the `.deb` hash against the index.
+  The weekly update only takes versions from that verified index, every build re-checks the
+  pin against it, and the build itself refuses a `.deb` whose SHA-256 differs from the pin.
+- **The app is Anthropic's, unmodified**: CI builds with `CLAUDE_OFFICIAL_ASAR=1`, so none of
+  upstream's `app.asar` patches are applied and `app.asar` ships byte-identical; no npm
+  package is installed at build time ([`fork/asar-read.js`](fork/asar-read.js) reads
+  `package.json` instead). The RPM and AppImage add upstream's launcher (`claude-desktop-unofficial`,
+  plus `--doctor`); the Flatpak adds only a two-line wrapper.
+- **Checked on every build**: [`fork/verify-official-app.sh`](fork/verify-official-app.sh) compares
+  the built RPM, AppImage and Flatpak against the pinned `.deb`: all of Anthropic's files must be
+  byte-identical, and the only extra files allowed are the launcher's `launcher-common.sh` and
+  `doctor.sh` (the Flatpak may only drop `chrome-sandbox`, which zypak replaces).
+- **Build tools are pinned**: `appimagetool` 1.9.1 and the type2 runtime 20251108 by SHA-256;
+  the Fedora build image by digest ([`fork/fedora-image`](fork/fedora-image), moved with each
+  release); Node.js from Fedora's own signed package for the RPM; GitHub actions by commit.
+
+## The launcher (RPM and AppImage)
+
+Upstream's launcher was reviewed line by line, together with `--doctor` and the RPM scriptlets:
+no network access at startup, no telemetry, the config file
+(`~/.config/claude-desktop-debian/environment`) is parsed for allowlisted keys and never executed,
+`--doctor` is read-only (one anonymous GET of Anthropic's public package index). The RPM's root
+scriptlets only refresh the desktop database and add a firmware symlink for Cowork when none exists.
+
+Behaviours to know:
+- **Chromium sandbox**: on in the RPM (this fork launches it as `rpm`, so upstream's Ubuntu-only
+  Wayland `--no-sandbox` workaround does not apply) and in the Flatpak (zypak). The AppImage always
+  runs with `--no-sandbox`: it cannot carry the setuid helper.
+- At each start the launcher kills leftover Claude helper processes of your user, matched by
+  command-line substrings (`cowork-vm-service.js`, `cowork-linux-helper`,
+  `~/.config/Claude/Claude Extensions/`, `/usr/lib/claude-desktop/…--type=`).
+- It keeps up to 5 copies of `~/.config/Claude/claude_desktop_config.json` (which can hold MCP
+  secrets) in `~/.cache/claude-desktop-debian/config-backups/`.
 
 ## Install
 

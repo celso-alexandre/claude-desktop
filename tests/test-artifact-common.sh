@@ -134,7 +134,14 @@ validate_app_contents() {
 	# contract — no exec bit required. Without it, an opt-in
 	# COWORK_VM_BACKEND=bwrap launch fails at spawn with doctor
 	# pointing at a reinstall.
-	if [[ -f $resources_dir/cowork-vm-service.js ]]; then
+	if [[ ${CLAUDE_OFFICIAL_ASAR:-} == 1 ]]; then
+		# Fork: no asar patches, so the bwrap daemon they stage must not ship
+		if [[ -f $resources_dir/cowork-vm-service.js ]]; then
+			fail 'cowork-vm-service.js shipped although CLAUDE_OFFICIAL_ASAR=1'
+		else
+			pass 'No cowork-vm-service.js (CLAUDE_OFFICIAL_ASAR=1, no patches)'
+		fi
+	elif [[ -f $resources_dir/cowork-vm-service.js ]]; then
 		pass 'Bundled cowork-vm-service.js present (bwrap daemon)'
 	else
 		fail 'Bundled cowork-vm-service.js missing from resources/'

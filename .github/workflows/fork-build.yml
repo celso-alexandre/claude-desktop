@@ -27,9 +27,15 @@ jobs:
       claude: ${{ steps.v.outputs.claude }}
       build_tag: ${{ steps.v.outputs.build_tag }}
       tag: ${{ steps.v.outputs.tag }}
+      rev: ${{ steps.v.outputs.rev }}
       publish: ${{ steps.v.outputs.publish }}
+      # Pinned by digest in fork/fedora-image; fork/check-update.sh moves it with each release
+      fedora: ${{ steps.v.outputs.fedora }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Every build below depends on this: Anthropic's signature over the index that lists the pin
+      - name: Pinned .deb is in Anthropic's signed index
+        run: fork/official-index.sh verify-pins
       - id: v
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,12 +44,16 @@ jobs:
         run: |
           CLAUDE=$(grep -oP "^OFFICIAL_DEB_VERSION='\K[^']+" scripts/setup/official-deb.sh)
           WRAPPER=$(grep -oPm1 '^## \[v\K[0-9]+\.[0-9]+\.[0-9]+(?=\])' CHANGELOG.md)
-          TAG="claude-$CLAUDE-$WRAPPER"
+          # fork/revision: bumped when this fork's packaging changes without a new Claude version
+          REV=$(cat fork/revision)
+          TAG="claude-$CLAUDE-$WRAPPER-$REV"
           {
+            echo "fedora=$(cat fork/fedora-image)"
             echo "claude=$CLAUDE"
             # build.sh reads the packaging (wrapper) version from this upstream-style tag
             echo "build_tag=v$WRAPPER+claude$CLAUDE"
             echo "tag=$TAG"
+            echo "rev=$REV"
           } >> "$GITHUB_OUTPUT"
           # Merges done by automerge below arrive as workflow_dispatch, not push
           [ "$GITHUB_REF" = refs/heads/main ] && [ "$GITHUB_EVENT_NAME" != pull_request ] || exit 0
@@ -72,9 +82,14 @@ jobs:
   rpm:
     needs: meta
     runs-on: ubuntu-24.04
-    container: fedora:44
+    container: ${{ needs.meta.outputs.fedora }}
+    env:
+      # Anthropic's app.asar unmodified: no upstream asar patches, no npm at build time
+      CLAUDE_OFFICIAL_ASAR: "1"
+      FORK_REVISION: ${{ needs.meta.outputs.rev }}
     steps:
-      - run: dnf install -y git findutils
+      # Fedora's signed nodejs: build.sh then needs no Node download
+      - run: dnf install -y git findutils nodejs
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: ./build.sh --build rpm --arch amd64 --release-tag "${{ needs.meta.outputs.build_tag }}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -87,6 +102,9 @@ jobs:
   appimage:
     needs: meta
     runs-on: ubuntu-24.04
+    env:
+      # Anthropic's app.asar unmodified: no upstream asar patches, no npm at build time
+      CLAUDE_OFFICIAL_ASAR: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: |
@@ -107,7 +125,7 @@ jobs:
     needs: meta
     runs-on: ubuntu-24.04
     container:
-      image: fedora:44
+      image: ${{ needs.meta.outputs.fedora }}
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -128,9 +146,12 @@ jobs:
 
   # Installed the way a user would, then launched: upstream's package checks and smoke test
   rpm-test:
-    needs: rpm
+    needs: [meta, rpm]
     runs-on: ubuntu-24.04
-    container: fedora:44
+    container: ${{ needs.meta.outputs.fedora }}
+    env:
+      # Anthropic's app.asar unmodified: no upstream asar patches, no npm at build time
+      CLAUDE_OFFICIAL_ASAR: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -139,7 +160,7 @@ jobs:
           path: artifacts/
       # The rpm declares no runtime Requires (AutoReqProv: no); these are Electron's libraries
       - run: |
-          dnf install -y findutils file nodejs npm shadow-utils \
+          dnf install -y findutils file nodejs npm shadow-utils binutils cpio xz \
             xorg-x11-server-Xvfb xdotool dbus-daemon util-linux procps-ng \
             nss nspr atk at-spi2-atk at-spi2-core cups-libs gtk3 \
             libdrm mesa-libgbm alsa-lib libX11 libXcomposite libXdamage \
@@ -148,10 +169,18 @@ jobs:
       - env:
           TARGET_ARCH: amd64
         run: bash tests/test-artifact-rpm.sh artifacts/
+      - name: Anthropic's files ship byte for byte
+        run: |
+          mkdir x && (cd x && rpm2cpio ../artifacts/*.rpm | cpio -id --quiet)
+          fork/verify-official-app.sh x/usr/lib/claude-desktop-unofficial \
+            --extra launcher-common.sh --extra doctor.sh
 
   appimage-test:
     needs: appimage
     runs-on: ubuntu-24.04
+    env:
+      # Anthropic's app.asar unmodified: no upstream asar patches, no npm at build time
+      CLAUDE_OFFICIAL_ASAR: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -164,12 +193,17 @@ jobs:
       - env:
           TARGET_ARCH: amd64
         run: bash tests/test-artifact-appimage.sh artifacts/
+      - name: Anthropic's files ship byte for byte
+        run: |
+          chmod +x artifacts/*.AppImage && artifacts/*.AppImage --appimage-extract >/dev/null
+          app=$(dirname "$(dirname "$(find squashfs-root -path '*/resources/app.asar' | head -1)")")
+          fork/verify-official-app.sh "$app" --extra launcher-common.sh --extra doctor.sh
 
   flatpak-test:
     needs: [meta, flatpak]
     runs-on: ubuntu-24.04
     container:
-      image: fedora:44
+      image: ${{ needs.meta.outputs.fedora }}
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -190,6 +224,11 @@ jobs:
             dbus-run-session -- fork/smoke-test.sh flatpak run "$APP_ID"
       - if: always()
         run: cp /tmp/smoke-flatpak.png . || true
+      - name: Anthropic's files ship byte for byte
+        run: |
+          dnf install -y binutils xz
+          fork/verify-official-app.sh "$(flatpak info --show-location "$APP_ID")/files/lib/claude-desktop" \
+            --missing chrome-sandbox
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:
@@ -219,7 +258,7 @@ jobs:
     needs: [meta, bats, rpm-test, appimage-test, flatpak-test]
     if: needs.meta.outputs.publish == 'true'
     runs-on: ubuntu-24.04
-    container: fedora:44
+    container: ${{ needs.meta.outputs.fedora }}
     permissions:
       contents: write
     steps:
