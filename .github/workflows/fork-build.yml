@@ -19,6 +19,8 @@ concurrency:
 
 env:
   APP_ID: io.github.celso_alexandre.ClaudeDesktop
+  # Ship Anthropic's app.asar unmodified: no upstream asar patches, no npm at build time
+  CLAUDE_OFFICIAL_ASAR: "1"
 
 jobs:
   meta:
@@ -28,8 +30,13 @@ jobs:
       build_tag: ${{ steps.v.outputs.build_tag }}
       tag: ${{ steps.v.outputs.tag }}
       publish: ${{ steps.v.outputs.publish }}
+      # Pinned by digest in fork/fedora-image; fork/check-update.sh moves it with each release
+      fedora: ${{ steps.v.outputs.fedora }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Every build below depends on this: Anthropic's signature over the index that lists the pin
+      - name: Pinned .deb is in Anthropic's signed index
+        run: fork/official-index.sh verify-pins
       - id: v
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,6 +47,7 @@ jobs:
           WRAPPER=$(grep -oPm1 '^## \[v\K[0-9]+\.[0-9]+\.[0-9]+(?=\])' CHANGELOG.md)
           TAG="claude-$CLAUDE-$WRAPPER"
           {
+            echo "fedora=$(cat fork/fedora-image)"
             echo "claude=$CLAUDE"
             # build.sh reads the packaging (wrapper) version from this upstream-style tag
             echo "build_tag=v$WRAPPER+claude$CLAUDE"
@@ -72,9 +80,10 @@ jobs:
   rpm:
     needs: meta
     runs-on: ubuntu-24.04
-    container: fedora:44
+    container: ${{ needs.meta.outputs.fedora }}
     steps:
-      - run: dnf install -y git findutils
+      # Fedora's signed nodejs: build.sh then needs no Node download
+      - run: dnf install -y git findutils nodejs
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: ./build.sh --build rpm --arch amd64 --release-tag "${{ needs.meta.outputs.build_tag }}"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -107,7 +116,7 @@ jobs:
     needs: meta
     runs-on: ubuntu-24.04
     container:
-      image: fedora:44
+      image: ${{ needs.meta.outputs.fedora }}
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -128,9 +137,9 @@ jobs:
 
   # Installed the way a user would, then launched: upstream's package checks and smoke test
   rpm-test:
-    needs: rpm
+    needs: [meta, rpm]
     runs-on: ubuntu-24.04
-    container: fedora:44
+    container: ${{ needs.meta.outputs.fedora }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -169,7 +178,7 @@ jobs:
     needs: [meta, flatpak]
     runs-on: ubuntu-24.04
     container:
-      image: fedora:44
+      image: ${{ needs.meta.outputs.fedora }}
       options: --privileged
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -219,7 +228,7 @@ jobs:
     needs: [meta, bats, rpm-test, appimage-test, flatpak-test]
     if: needs.meta.outputs.publish == 'true'
     runs-on: ubuntu-24.04
-    container: fedora:44
+    container: ${{ needs.meta.outputs.fedora }}
     permissions:
       contents: write
     steps:

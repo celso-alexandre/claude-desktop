@@ -35,7 +35,7 @@ fi
 rc=0
 fork/check-update.sh >/dev/null || rc=$?
 [[ $rc == 0 || $rc == 3 ]] || exit "$rc"
-git add -A "$PINS" fork/flatpak
+git add -A "$PINS" fork/flatpak fork/fedora-image
 
 if git diff --cached --quiet; then
 	echo "already in sync with upstream $head" >&2

@@ -1,12 +1,30 @@
 # Claude Desktop for Fedora, Flatpak and AppImage (celso-alexandre fork)
 
 Anthropic's official Claude Desktop for Linux ships only as a `.deb`. This fork repacks
-that `.deb`, checked against the SHA-256 in Anthropic's own APT index, into three formats
-and publishes them from this repository only: packages on GitHub Releases, the dnf and
-Flatpak repos on GitHub Pages. There is no third-party package host, CDN or signing key.
+that `.deb` into three formats and publishes them from this repository only: packages on
+GitHub Releases, the dnf and Flatpak repos on GitHub Pages. There is no third-party package
+host, CDN or signing key.
 
 Packages and repo metadata are signed with this fork's key
 (`F4E3 86FF 1A06 E49B 2D02  FB72 B072 862E 877E B4A6`, also in [`fork/KEY.gpg`](fork/KEY.gpg)).
+
+## What is verified
+
+- **Anthropic's `.deb`**: [`fork/official-index.sh`](fork/official-index.sh) checks the signed
+  `InRelease` of Anthropic's APT repo with `gpgv` against their release key
+  ([`fork/anthropic-claude-desktop.asc`](fork/anthropic-claude-desktop.asc), fingerprint
+  `31DD DE24 DDFA B679 F42D  7BD2 BAA9 29FF 1A7E CACE`, as published in their install docs),
+  then the `Packages` index against the signed hash, then the `.deb` hash against the index.
+  The weekly update only takes versions from that verified index, every build re-checks the
+  pin against it, and the build itself refuses a `.deb` whose SHA-256 differs from the pin.
+- **The app is Anthropic's, unmodified**: CI builds with `CLAUDE_OFFICIAL_ASAR=1`, so none of
+  upstream's `app.asar` patches are applied and `app.asar` ships byte-identical; no npm
+  package is installed at build time ([`fork/asar-read.js`](fork/asar-read.js) reads
+  `package.json` instead). The RPM and AppImage add upstream's launcher (`claude-desktop-unofficial`,
+  plus `--doctor`); the Flatpak adds only a two-line wrapper.
+- **Build tools are pinned**: `appimagetool` 1.9.1 and the type2 runtime 20251108 by SHA-256;
+  the Fedora build image by digest ([`fork/fedora-image`](fork/fedora-image), moved with each
+  release); Node.js from Fedora's own signed package for the RPM; GitHub actions by commit.
 
 ## Install
 

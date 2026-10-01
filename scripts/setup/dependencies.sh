@@ -241,6 +241,15 @@ setup_nodejs() {
 setup_asar() {
 	section_header 'Asar Tooling'
 
+	# Fork: with no patch active only package.json is read, which
+	# fork/asar-read.js does without installing @electron/asar from npm
+	if [[ ${CLAUDE_OFFICIAL_ASAR:-} == 1 ]]; then
+		asar_exec="$project_root/fork/asar-read.js"
+		echo "Using $asar_exec (CLAUDE_OFFICIAL_ASAR=1, no npm install)"
+		section_footer 'Asar Tooling'
+		return 0
+	fi
+
 	# @electron/asar is only needed while at least one asar patch is
 	# active (see active_patches in scripts/patches/app-asar.sh);
 	# patch_app_asar also uses it to read package.json fields without a
