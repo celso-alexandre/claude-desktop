@@ -287,7 +287,7 @@ jobs:
             gh release create "$TAG" -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Claude Desktop $CLAUDE" \
               --notes "Claude Desktop $CLAUDE, repacked from Anthropic's official Linux .deb.
 
-          Automatic updates: add the dnf or Flatpak repo (see FORK.md), or keep the AppImage current with Gear Lever / AppImageUpdate. One-off installs: the files below."
+          Automatic updates: add the dnf or Flatpak repo (see README), or keep the AppImage current with Gear Lever / AppImageUpdate. One-off installs: the files below."
           gh release upload "$TAG" -R "$GITHUB_REPOSITORY" --clobber dist/*.rpm dist/*.AppImage dist/*.zsync dist/*.flatpak
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

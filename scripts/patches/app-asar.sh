@@ -52,7 +52,7 @@ active_patches=(
 	patch_cowork_bwrap
 	patch_tray_icon_env_override
 )
-# Fork: ship Anthropic's app.asar unmodified (see FORK.md)
+# Fork: ship Anthropic's app.asar unmodified (see README.md)
 if [[ ${CLAUDE_OFFICIAL_ASAR:-} == 1 ]]; then
 	active_patches=()
 fi
