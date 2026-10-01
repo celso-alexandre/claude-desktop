@@ -23,6 +23,11 @@ if [[ $version == *-* ]]; then
 	# (e.g. "3.0.0-rc1"), which lands entirely in rpm_release here since
 	# the split above only cuts on the first hyphen.
 	rpm_release="${rpm_release//-/.}"
+	# Fork: a packaging-only rebuild (same Claude and wrapper version) must still
+	# upgrade; a numeric segment sorts after the old release's ".fc44"
+	if [[ -n ${FORK_REVISION:-} ]]; then
+		rpm_release+=".$FORK_REVISION"
+	fi
 	echo "RPM Version: $rpm_version"
 	echo "RPM Release: $rpm_release"
 else
@@ -97,7 +102,7 @@ if [[ "\${1:-}" == '--doctor' ]]; then
 	# 'rpm' is normalized to 'deb' inside the doctor's effective-sandbox
 	# check, so either literal reports accurately here; kept as 'deb'
 	# to match the build_electron_args call below.
-	run_doctor "\$app_exec" 'deb'
+	run_doctor "\$app_exec" 'rpm'
 	exit \$?
 fi
 
@@ -146,8 +151,10 @@ if [[ ! -x \$app_exec ]]; then
 	exit 1
 fi
 
-# Build Chromium switches - use 'deb' type (same sandbox behavior)
-build_electron_args 'deb'
+# Build Chromium switches. Fork: 'rpm', not 'deb' — the Wayland --no-sandbox
+# workaround is for Ubuntu's AppArmor userns restriction (#804), which Fedora
+# does not have, so the sandbox stays on
+build_electron_args 'rpm'
 
 # Change to application directory
 app_dir="/usr/lib/$package_name"
@@ -228,6 +235,9 @@ AutoReqProv:    no
 
 # Disable binary stripping (Electron binaries don't like it)
 %define __strip /bin/true
+
+# Fork: ship Anthropic's files byte for byte (no #!/bin/sh -> #!/usr/bin/sh rewrite)
+%undefine __brp_mangle_shebangs
 
 # Disable build ID generation (avoids issues with Electron binaries)
 %define _build_id_links none

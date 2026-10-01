@@ -22,9 +22,31 @@ Packages and repo metadata are signed with this fork's key
   package is installed at build time ([`fork/asar-read.js`](fork/asar-read.js) reads
   `package.json` instead). The RPM and AppImage add upstream's launcher (`claude-desktop-unofficial`,
   plus `--doctor`); the Flatpak adds only a two-line wrapper.
+- **Checked on every build**: [`fork/verify-official-app.sh`](fork/verify-official-app.sh) compares
+  the built RPM, AppImage and Flatpak against the pinned `.deb`: all of Anthropic's files must be
+  byte-identical, and the only extra files allowed are the launcher's `launcher-common.sh` and
+  `doctor.sh` (the Flatpak may only drop `chrome-sandbox`, which zypak replaces).
 - **Build tools are pinned**: `appimagetool` 1.9.1 and the type2 runtime 20251108 by SHA-256;
   the Fedora build image by digest ([`fork/fedora-image`](fork/fedora-image), moved with each
   release); Node.js from Fedora's own signed package for the RPM; GitHub actions by commit.
+
+## The launcher (RPM and AppImage)
+
+Upstream's launcher was reviewed line by line, together with `--doctor` and the RPM scriptlets:
+no network access at startup, no telemetry, the config file
+(`~/.config/claude-desktop-debian/environment`) is parsed for allowlisted keys and never executed,
+`--doctor` is read-only (one anonymous GET of Anthropic's public package index). The RPM's root
+scriptlets only refresh the desktop database and add a firmware symlink for Cowork when none exists.
+
+Behaviours to know:
+- **Chromium sandbox**: on in the RPM (this fork launches it as `rpm`, so upstream's Ubuntu-only
+  Wayland `--no-sandbox` workaround does not apply) and in the Flatpak (zypak). The AppImage always
+  runs with `--no-sandbox`: it cannot carry the setuid helper.
+- At each start the launcher kills leftover Claude helper processes of your user, matched by
+  command-line substrings (`cowork-vm-service.js`, `cowork-linux-helper`,
+  `~/.config/Claude/Claude Extensions/`, `/usr/lib/claude-desktop/…--type=`).
+- It keeps up to 5 copies of `~/.config/Claude/claude_desktop_config.json` (which can hold MCP
+  secrets) in `~/.cache/claude-desktop-debian/config-backups/`.
 
 ## Install
 
