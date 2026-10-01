@@ -1,222 +1,146 @@
-# Claude Desktop for Linux
+# Claude Desktop for Fedora, Flatpak and AppImage
 
-This project repackages Claude Desktop for Linux formats Anthropic doesn't ship themselves: `.rpm` (Fedora/RHEL), distribution-agnostic AppImages, a Nix flake for NixOS, and an [AUR package](#using-aur-arch-linux) for Arch (currently unavailable — see below).
+Anthropic's official Claude Desktop for Linux ships only as a `.deb`. This repository repacks
+that `.deb` into an RPM, a Flatpak and an AppImage, and publishes them from here only: packages
+on [GitHub Releases](https://github.com/celso-alexandre/claude-desktop/releases), the dnf and
+Flatpak repos on GitHub Pages. There is no third-party package host, CDN or signing key.
 
-On 2026-06-30 Anthropic shipped a first-party Claude Desktop for Linux beta, distributed as a `.deb` (amd64 and arm64) from their own APT repository. Since v3.0.0, this project repackages that official Linux `.deb`. It no longer repackages the Windows installer.
+Packages and repo metadata are signed with this repository's key
+(`F4E3 86FF 1A06 E49B 2D02  FB72 B072 862E 877E B4A6`, also in [`fork/KEY.gpg`](fork/KEY.gpg)).
 
-The official `.deb` covers one packaging target. What it leaves out is a long tail of distros, desktops, and session types — catalogued from this project's own issue history in [the reported-environments survey](docs/reports/CDL-ANT-0009_patch-suite-history/reported-environments/grouped-families.md). That long tail is what this project serves, plus a launcher and a `--doctor` for the Linux environment quirks. The [Installation](#installation) section lays out what's ours and what's upstream.
-
-**Note:** This is an unofficial repackaging project. For official support, visit [Anthropic's website](https://www.anthropic.com). For issues with the packaging or the Linux launcher, please [open an issue](https://github.com/aaddrick/claude-desktop-debian/issues) here.
-
-**Documentation:** Full docs at [`docs/index.md`](docs/index.md). Release history in [`CHANGELOG.md`](CHANGELOG.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Security reports: [`SECURITY.md`](SECURITY.md).
-
----
-
-## Maintainership
-
-As of September 2026, [@sabiut](https://github.com/sabiut) leads this project. I ([@aaddrick](https://github.com/aaddrick)) am stepping back to focus on other things. @sabiut has been the most consistent contributor here and has final say on direction, releases, and what lands.
-
-The repo stays where it is — `aaddrick/claude-desktop-debian`, at @sabiut's request. No transfer, no new URLs: existing APT/DNF sources, issue links, and clone remotes all keep working. I still hold the signing keys and the Cloudflare Worker credentials, so publishing surfaces list both of us in [CODEOWNERS](.github/CODEOWNERS).
-
-A repository owned by a personal account has only two access levels — owner and collaborator — so a few things can't be handed over without moving the repo: settings, branch protection, Actions secrets, and security advisories. Those still land on me. Ping me and I'll press the button. Releases themselves are automatic, and the version variables are settable by any collaborator through `gh variable set`, so day-to-day work doesn't route through me.
-
-I'll still be around for questions and the occasional PR — reachable on [GitHub](https://github.com/aaddrick) or [LinkedIn](https://www.linkedin.com/in/aaddrick/).
-
----
-
-## Features
-
-- **Official app, extra formats**: repackages Anthropic's official Linux `.deb` into `.rpm`, AppImage, and AUR builds.
-- **MCP support**: full Model Context Protocol integration. Config lives at `~/.config/Claude/claude_desktop_config.json` (see [Configuration](#configuration)).
-- **Launcher for Linux quirks**: opt-in native Wayland (`CLAUDE_USE_WAYLAND=1`), GPU-crash auto-recovery, XRDP detection, IM-module override, and autostart-entry healing.
-- **`--doctor` diagnostics**: checks the display server, sandbox permissions, MCP config, stale locks, the KVM/Cowork stack, and official-version drift.
-- **Cowork on Linux**: runs when KVM (hardware virtualization) is available. The doctor reports readiness.
-- **System integration**: global hotkey (Ctrl+Alt+Space) on X11 and Wayland, system tray, and desktop-environment integration.
-
-### Screenshots
+**Note:** this is an unofficial repackaging. For the app itself, see
+[Anthropic's support](https://support.claude.com).
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/aaddrick/claude-desktop-debian/main/docs/images/claude-desktop-screenshot1.png" alt="Claude Desktop running on Linux" />
+  <img src="docs/images/claude-desktop-screenshot1.png" alt="Claude Desktop running on Linux" />
 </p>
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/aaddrick/claude-desktop-debian/main/docs/images/claude-desktop-screenshot2.png" alt="Global hotkey popup" />
-</p>
+## Install
 
-## Installation
-
-Anthropic serves the `.deb`. We serve everything else. Since v3.0.0 our packages are named `claude-desktop-unofficial`, so they install side-by-side with Anthropic's official `claude-desktop` — but both share `~/.config/Claude`, so only one can run at a time. Here's the split:
-
-| Format | Who serves it |
-|--------|---------------|
-| `.deb` (Debian/Ubuntu, amd64 + arm64) | Anthropic's official APT repo. Ours mirrors it as `claude-desktop-unofficial` (launcher + doctor added), so it can sit beside the official package. |
-| `.rpm` (Fedora/RHEL) | This project. |
-| AppImage (any distro) | This project. |
-| AUR (Arch) | This project (builds the AppImage). **Unavailable** — see [below](#using-aur-arch-linux). |
-| Nix flake (NixOS) | This project. |
-
-On top of packaging, every format we build carries:
-
-- **Our launcher.** Opt-in native Wayland via `CLAUDE_USE_WAYLAND=1`, GPU-crash auto-recovery, XRDP detection, IM-module override, and autostart-entry healing.
-- **`claude-desktop-unofficial --doctor`.** Diagnostics for the KVM/Cowork stack, official-version drift, name collisions, and config problems.
-- **Packaging fixes.** The RPM firmware compat symlink Cowork needs, and the Ubuntu 24.04+ AppArmor profile.
-
-The app itself is the official `app.asar`. A patch has to justify itself against the official bytes or get deleted — most of the pre-v3.0.0 suite was deleted when Anthropic shipped official Linux builds. Five Linux-gap patches survive:
-
-- **virtiofsd resolution.** Upstream probes only `/usr/libexec/virtiofsd` and `/usr/bin/virtiofsd`, falling back to its bundled copy only when `/etc/os-release` reports Ubuntu 22.x. Arch installs virtiofsd at `/usr/lib/virtiofsd` and Debian at `/usr/lib/qemu/virtiofsd`, so Cowork reports "requires QEMU" on a complete KVM stack. Dropping the os-release gate fixes it; system paths stay preferred. Filed upstream.
-- **org-plugins path.** Upstream's platform switch has cases for darwin and win32 only, and the default returns null, so the org-plugins feature is silently dead on Linux. Adds a `linux` case resolving `/etc/claude/org-plugins`. Filed upstream.
-- **Tray icon selection.** Upstream's desktop-environment detector returns kde, gnome, or other, so Cinnamon — which can pair a dark panel with a light GTK colour scheme — gets the wrong glyph. Threads the launcher's `CLAUDE_TRAY_USE_DARK_ICON` into upstream's own selector without replacing its icons. Filed upstream.
-- **Quick Entry focus.** Adds `blur()` before `hide()` on the pop-up window so the main window reappears after submit, working around an Electron focus bug on KDE.
-- **Cowork bubblewrap backend.** Opt-in via `COWORK_VM_BACKEND=bwrap` for hosts without KVM/vhost-vsock. Every branch is gated on the flag, so an unflagged launch runs upstream's path unchanged.
-
-### Using APT Repository (Debian/Ubuntu - Recommended)
-
-Add the repository for automatic updates via `apt`:
+### Fedora / RHEL (dnf): updates with your other packages
 
 ```bash
-# Add the GPG key
-curl -fsSL https://pkg.claude-desktop-debian.dev/KEY.gpg | sudo gpg --dearmor -o /usr/share/keyrings/claude-desktop-unofficial.gpg
-
-# Add the repository
-echo "deb [signed-by=/usr/share/keyrings/claude-desktop-unofficial.gpg arch=amd64,arm64] https://pkg.claude-desktop-debian.dev stable main" | sudo tee /etc/apt/sources.list.d/claude-desktop-unofficial.list
-
-# Update and install
-sudo apt update
-sudo apt install claude-desktop-unofficial
-```
-
-Future updates will be installed automatically with your regular system updates (`sudo apt upgrade`).
-
-### Using DNF Repository (Fedora/RHEL - Recommended)
-
-Add the repository for automatic updates via `dnf`:
-
-```bash
-# Add the repository
-sudo curl -fsSL https://pkg.claude-desktop-debian.dev/rpm/claude-desktop-unofficial.repo -o /etc/yum.repos.d/claude-desktop-unofficial.repo
-
-# Install
+sudo curl -fsSLo /etc/yum.repos.d/claude-desktop.repo https://celso-alexandre.github.io/claude-desktop/claude-desktop.repo
 sudo dnf install claude-desktop-unofficial
 ```
 
-Future updates will be installed automatically with your regular system updates (`sudo dnf upgrade`).
+The first install asks to import the key above; check the fingerprint. Updates then arrive
+through `dnf upgrade` and Discover / GNOME Software like any other package.
 
-### Using AUR (Arch Linux)
+Cowork (the agentic VM tab) also needs `sudo dnf install qemu-kvm edk2-ovmf virtiofsd`.
 
-**Unavailable since 2026-08-01.** `claude-desktop-appimage` was deleted from the AUR under deletion request [PRQ#85209](https://lists.archlinux.org/archives/list/aur-requests@lists.archlinux.org/thread/33X5H3TTGPXBEFKJFHEL5JYVGOE52IRV/) as a duplicate of `aur/claude-desktop`. A reinstatement request is with the list moderators. Until it resolves, install the [AppImage](#using-pre-built-releases) directly.
-
-Automated AUR publishing is paused while that request is open — a deleted pkgbase keeps its git repo and still accepts pushes, so a release would recreate the package mid-review. Once the package is restored:
-
-```bash
-gh variable set AUR_PUBLISH_ENABLED --body true
-```
-
-The `update-aur-repo` job in [`ci.yml`](.github/workflows/ci.yml) is gated on that variable, and the pending `pkgdesc`/`license` corrections still need pushing to the AUR pkgbase.
-
-When it is available, the package installs the AppImage build of Claude Desktop:
+Coming from `aaddrick/claude-desktop-debian`'s repo? The package name is the same, so remove
+the old source first, then run the two commands above:
 
 ```bash
-# Using yay
-yay -S claude-desktop-appimage
-
-# Or using paru
-paru -S claude-desktop-appimage
+sudo dnf remove claude-desktop-unofficial
+sudo rm /etc/yum.repos.d/claude-desktop-unofficial.repo
 ```
 
-### Using Nix Flake (NixOS)
-
-Install directly from the flake:
+### Any distro (Flatpak): updates with your other Flatpaks
 
 ```bash
-# Basic install
-nix profile install github:aaddrick/claude-desktop-debian
-
-# With MCP server support (FHS environment)
-nix profile install github:aaddrick/claude-desktop-debian#claude-desktop-fhs
+flatpak install --user https://celso-alexandre.github.io/claude-desktop/io.github.celso_alexandre.ClaudeDesktop.flatpakref
 ```
 
-Or add to your NixOS configuration:
+Chat works fully. The **Code** tab sees the Flatpak runtime, not your system's toolchain,
+and **Cowork** is unavailable (no QEMU in the sandbox): use the RPM on dev machines.
 
-```nix
-# flake.nix
-{
-  inputs.claude-desktop.url = "github:aaddrick/claude-desktop-debian";
+### Any distro (AppImage)
 
-  outputs = { nixpkgs, claude-desktop, ... }: {
-    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
-      modules = [
-        ({ pkgs, ... }: {
-          nixpkgs.overlays = [ claude-desktop.overlays.default ];
-          environment.systemPackages = [ pkgs.claude-desktop ];
-        })
-      ];
-    };
-  };
-}
-```
+Download `claude-desktop-unofficial-*-amd64.AppImage` from the
+[latest release](https://github.com/celso-alexandre/claude-desktop/releases/latest).
+It carries update information for this repository's releases, so Gear Lever or AppImageUpdate
+keeps it current.
 
-### Using Pre-built Releases
+### Building from source
 
-Download the latest `.deb`, `.rpm`, or `.AppImage` from the [Releases page](https://github.com/aaddrick/claude-desktop-debian/releases).
+See [docs/building.md](docs/building.md).
 
-### Building from Source
+## What is verified
 
-See [docs/building.md](docs/building.md) for detailed build instructions.
+- **Anthropic's `.deb`**: [`fork/official-index.sh`](fork/official-index.sh) checks the signed
+  `InRelease` of Anthropic's APT repo with `gpgv` against their release key
+  ([`fork/anthropic-claude-desktop.asc`](fork/anthropic-claude-desktop.asc), fingerprint
+  `31DD DE24 DDFA B679 F42D  7BD2 BAA9 29FF 1A7E CACE`, as published in their install docs),
+  then the `Packages` index against the signed hash, then the `.deb` hash against the index.
+  The weekly update only takes versions from that verified index, every build re-checks the
+  pin against it, and the build itself refuses a `.deb` whose SHA-256 differs from the pin.
+- **The app is Anthropic's, unmodified**: CI builds with `CLAUDE_OFFICIAL_ASAR=1`, so no
+  `app.asar` patches are applied and `app.asar` ships byte-identical; no npm package is
+  installed at build time ([`fork/asar-read.js`](fork/asar-read.js) reads `package.json`
+  instead). The RPM and AppImage add the launcher (`claude-desktop-unofficial`, plus
+  `--doctor`); the Flatpak adds only a two-line wrapper.
+- **Checked on every build**: [`fork/verify-official-app.sh`](fork/verify-official-app.sh) compares
+  the built RPM, AppImage and Flatpak against the pinned `.deb`: all of Anthropic's files must be
+  byte-identical, and the only extra files allowed are the launcher's `launcher-common.sh` and
+  `doctor.sh` (the Flatpak may only drop `chrome-sandbox`, which zypak replaces).
+- **Build tools are pinned**: `appimagetool` 1.9.1 and the type2 runtime 20251108 by SHA-256;
+  the Fedora build image by digest ([`fork/fedora-image`](fork/fedora-image), moved with each
+  release); Node.js from Fedora's own signed package for the RPM; GitHub actions by commit.
+
+## The launcher (RPM and AppImage)
+
+The launcher was reviewed line by line, together with `--doctor` and the RPM scriptlets:
+no network access at startup, no telemetry, the config file
+(`~/.config/claude-desktop-debian/environment`) is parsed for allowlisted keys and never executed,
+`--doctor` is read-only (one anonymous GET of Anthropic's public package index). The RPM's root
+scriptlets only refresh the desktop database and add a firmware symlink for Cowork when none exists.
+
+Behaviours to know:
+- **Chromium sandbox**: on in the RPM (the launcher runs as `rpm`, so the Ubuntu-only
+  Wayland `--no-sandbox` workaround does not apply) and in the Flatpak (zypak). The AppImage always
+  runs with `--no-sandbox`: it cannot carry the setuid helper.
+- At each start the launcher kills leftover Claude helper processes of your user, matched by
+  command-line substrings (`cowork-vm-service.js`, `cowork-linux-helper`,
+  `~/.config/Claude/Claude Extensions/`, `/usr/lib/claude-desktop/…--type=`).
+- It keeps up to 5 copies of `~/.config/Claude/claude_desktop_config.json` (which can hold MCP
+  secrets) in `~/.cache/claude-desktop-debian/config-backups/`.
+
+The package is named `claude-desktop-unofficial`, so it can sit beside Anthropic's own
+`claude-desktop`, but both share `~/.config/Claude`: run only one at a time.
+
+## How it stays current
+
+- **Weekly** ([`fork-check-update.yml`](.github/workflows/fork-check-update.yml)): if
+  Anthropic's APT repo has a newer `claude-desktop`, [`fork/check-update.sh`](fork/check-update.sh)
+  bumps the pinned `.deb` (URL and SHA-256) for all three formats and opens a PR on
+  `auto/update-claude`.
+- **Build** ([`fork-build.yml`](.github/workflows/fork-build.yml)): builds the RPM (Fedora 44),
+  AppImage and Flatpak; installs and launches each one headless. The update PR is merged
+  when all pass; main then signs the packages, creates the release and publishes the repos
+  ([`fork/site.sh`](fork/site.sh)).
+
+The app comes only from Anthropic. The launcher, `--doctor` and build scripts started from
+[aaddrick/claude-desktop-debian](https://github.com/aaddrick/claude-desktop-debian) and are
+maintained here; nothing from that repository is pulled in automatically.
+
+Secrets: `PKG_GPG_PRIVATE_KEY` (armored secret key), `PKG_GPG_KEY_ID` (its fingerprint).
 
 ## Configuration
 
-Model Context Protocol settings are stored in:
-```
-~/.config/Claude/claude_desktop_config.json
-```
+MCP settings live in `~/.config/Claude/claude_desktop_config.json`. Quit Claude Desktop before
+editing it by hand: the app rewrites the file while running and would overwrite your edits.
 
-**Quit Claude Desktop before you hand-edit this file, then reopen it.** The app rewrites its own config while running, so edits you make with the app open get overwritten the next time it writes. Quit first, edit, then relaunch. Servers loaded at startup survive restarts fine — this only bites manual edits made against a running app.
-
-For additional configuration options including environment variables and Wayland support, see [docs/configuration.md](docs/configuration.md).
+Launcher options (native Wayland with `CLAUDE_USE_WAYLAND=1`, IM-module override, and more) are
+in [docs/configuration.md](docs/configuration.md).
 
 ## Troubleshooting
 
-Run `claude-desktop-unofficial --doctor` for built-in diagnostics. It checks the usual suspects: display server, sandbox permissions, MCP config, stale locks, and more. It also reports Cowork readiness. Cowork on Linux runs on a KVM-backed VM, so the doctor reports which of its dependencies (KVM, QEMU, OVMF firmware, vhost-vsock, virtiofsd) are installed or missing.
-
-For additional troubleshooting, uninstallation instructions, and log locations, see [docs/troubleshooting.md](docs/troubleshooting.md).
+Run `claude-desktop-unofficial --doctor` (RPM and AppImage). It checks the display server,
+sandbox permissions, MCP config, stale locks, and Cowork readiness (KVM, QEMU, OVMF firmware,
+vhost-vsock, virtiofsd). More in [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Acknowledgments
 
-This project was inspired by [k3d3's claude-desktop-linux-flake](https://github.com/k3d3/claude-desktop-linux-flake) and their [Reddit post](https://www.reddit.com/r/ClaudeAI/comments/1hgsmpq/i_successfully_ran_claude_desktop_natively_on/) about running Claude Desktop natively on Linux.
-
-Special thanks to:
-- **k3d3**
-  - Original NixOS implementation
-  - Native bindings insights
-- **[emsi](https://github.com/emsi/claude-desktop)**
-  - Title bar fix
-  - Alternative implementation approach
-- **[leobuskin](https://github.com/leobuskin/unofficial-claude-desktop-linux)** for the Playwright-based URL resolution approach
-
-The full contributor credits list — everyone whose PR, fix, or analysis
-shaped this project, in chronological order — lives in
-[ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
-
-## Sponsorship
-
-If this project is useful to you, consider [sponsoring on GitHub](https://github.com/sponsors/aaddrick).
+Built on [aaddrick/claude-desktop-debian](https://github.com/aaddrick/claude-desktop-debian)
+and everyone credited in [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md), which was itself inspired by
+[k3d3's claude-desktop-linux-flake](https://github.com/k3d3/claude-desktop-linux-flake).
 
 ## License
 
-The build scripts in this repository are dual-licensed under:
-- MIT License (see [LICENSE-MIT](LICENSE-MIT))
-- Apache License 2.0 (see [LICENSE-APACHE](LICENSE-APACHE))
+The build scripts in this repository are dual-licensed under the MIT License
+([LICENSE-MIT](LICENSE-MIT)) and the Apache License 2.0 ([LICENSE-APACHE](LICENSE-APACHE)).
 
-The Claude Desktop application itself is subject to [Anthropic's Consumer Terms](https://www.anthropic.com/legal/consumer-terms).
-
-## Privacy
-
-This repository uses an automated triage bot that sends issue contents to Anthropic's API for classification and investigation when you file a bug report or feature request. The bot reads the issue body, title, and any referenced related issues; it does not follow URLs, execute code blocks, or read content outside the triggering issue.
-
-Do not include credentials, tokens, personal data, or anything you wouldn't put on a public issue tracker. If you post sensitive content and then edit it out, the bot's original read is preserved as a run artifact for audit — GitHub's UI hides the edit, but the bot's view of what you wrote is recoverable by maintainers.
-
-Full design and data inventory: [`docs/issue-triage/README.md`](docs/issue-triage/README.md).
-
-## Contributing
-
-Contributions are welcome! By submitting a contribution, you agree to license it under the same dual-license terms as this project.
+The Claude Desktop application itself is subject to
+[Anthropic's Consumer Terms](https://www.anthropic.com/legal/consumer-terms).
